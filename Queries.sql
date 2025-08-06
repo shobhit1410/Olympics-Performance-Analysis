@@ -1,50 +1,76 @@
 --1 which team has won the maximum gold medals over the years.
-select top 1  team,count(distinct event) as cnt from athlete_events ae
-inner join athletes a on ae.athlete_id=a.id
-where medal='Gold'
-group by team
-order by cnt desc
+select top 1 
+ a.team , 
+ count(case when ae.medal='gold' then a.team end) as cnt 
+from athletes a
+inner join athlete_events ae on a.id=ae.athlete_id
+group by a.team
+order by cnt desc;
 
 --2 for each team print total silver medals and year in which they won maximum silver medal..output 3 columns
 -- team,total_silver_medals, year_of_max_silver
 with cte as (
-select a.team,ae.year , count(distinct event) as silver_medals
-,rank() over(partition by team order by count(distinct event) desc) as rn
+select 
+ a.team,
+ ae.year,
+ count(case when ae.medal='silver' then ae.medal end) as cnt 
 from athlete_events ae
 inner join athletes a on ae.athlete_id=a.id
-where medal='Silver'
-group by a.team,ae.year)
-select team,sum(silver_medals) as total_silver_medals, max(case when rn=1 then year end) as  year_of_max_silver
+group by a.team, ae.year
+),
+bte as (
+select *,
+ sum(cnt) over (partition by team) as total_silver,
+ max(cnt) over (partition by team) as max_silver, 
+ ROW_NUMBER() OVER (PARTITION BY team ORDER BY year DESC) AS rn
 from cte
-group by team;
+where cnt>0)
+select team , year as year_of_max_silver,total_silver from bte 
+where rn=1;
 
 --3 which player has won maximum gold medals  amongst the players 
 --which have won only gold medal (never won silver or bronze) over the years
-with cte as (
-select name,medal
+with cte as(
+select 
+ a.name,
+ ae.medal
 from athlete_events ae
-inner join athletes a on ae.athlete_id=a.id)
-select top 1 name , count(1) as no_of_gold_medals
+inner join athletes a on ae.athlete_id=a.id
+)
+select top 1
+ name ,
+ count(1) as no_of_gold_medals
 from cte 
 where name not in (select distinct name from cte where medal in ('Silver','Bronze'))
 and medal='Gold'
 group by name
-order by no_of_gold_medals desc
+order by no_of_gold_medals desc;
 
 --4 in each year which player has won maximum gold medal . Write a query to print year,player name 
 --and no of golds won in that year . In case of a tie print comma separated player names.
 with cte as (
-select ae.year,a.name,count(1) as no_of_gold
+select 
+ a.name,
+ ae.year,
+ count(case when medal='gold' then medal end) as total_gold_yearly
 from athlete_events ae
 inner join athletes a on ae.athlete_id=a.id
-where medal='Gold'
-group by ae.year,a.name)
-select year,no_of_gold,STRING_AGG(name,',') as players from (
+where medal='gold'
+group by a.name,ae.year
+),
+bte as (
 select *,
-rank() over(partition by year order by no_of_gold desc) as rn
-from cte) a where rn=1
-group by year,no_of_gold
-;
+ rank() over (partition by year order by total_gold_yearly desc) as rk 
+from cte)
+select 
+ year,
+ total_gold_yearly,
+ STRING_AGG(name,',') as names 
+from bte 
+where rk=1
+group by year,total_gold_yearly
+order by year;
+
 --5 in which event and year India has won its first gold medal,first silver medal and first bronze medal
 --print 3 columns medal,year,sport
 select distinct * from (
