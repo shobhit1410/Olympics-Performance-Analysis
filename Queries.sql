@@ -1,9 +1,10 @@
 --1 which team has won the maximum gold medals over the years.
 select top 1 
  a.team , 
- count(case when ae.medal='gold' then a.team end) as cnt 
+ count(distinct ae.event) as cnt 
 from athletes a
 inner join athlete_events ae on a.id=ae.athlete_id
+where medal='gold'
 group by a.team
 order by cnt desc;
 
@@ -73,38 +74,59 @@ order by year;
 
 --5 in which event and year India has won its first gold medal,first silver medal and first bronze medal
 --print 3 columns medal,year,sport
-select distinct * from (
-select medal,year,event,rank() over(partition by medal order by year) rn
+with cte as (
+select 
+ ae.event,
+ ae.medal,
+ ae.year,rank() over(partition by ae.medal order by ae.year asc) as rn
 from athlete_events ae
 inner join athletes a on ae.athlete_id=a.id
-where team='India' and medal != 'NA'
-) A
-where rn=1
+where a.team='India' and ae.medal!='NA'
+)
+select distinct 
+ event,
+ medal,
+ year 
+from cte
+where rn=1;
 
 --6 find players who won gold medal in summer and winter olympics both.
-select a.name  
+select distinct
+ a.name 
 from athlete_events ae
 inner join athletes a on ae.athlete_id=a.id
-where medal='Gold'
-group by a.name having count(distinct season)=2
+where ae.medal='gold'
+group by a.name
+having count(distinct ae.season)=2;
 
 --7 find players who won gold, silver and bronze medal in a single olympics. print player name along with year.
-select year,name
+select 
+ a.name,
+ ae.year 
 from athlete_events ae
 inner join athletes a on ae.athlete_id=a.id
-where medal != 'NA'
-group by year,name having count(distinct medal)=3
+where ae.medal !='NA'
+group by a.name,ae.year
+having count(distinct ae.medal)=3;
 
 --8 find players who have won gold medals in consecutive 3 summer olympics in the same event . Consider only olympics 2000 onwards. 
 --Assume summer olympics happens every 4 year starting 2000. print player name and event name.
 with cte as (
-select name,year,event
-from athlete_events ae
-inner join athletes a on ae.athlete_id=a.id
-where year >=2000 and season='Summer'and medal = 'Gold'
-group by name,year,event)
-select * from
-(select *, lag(year,1) over(partition by name,event order by year ) as prev_year
-, lead(year,1) over(partition by name,event order by year ) as next_year
-from cte) A
-where year=prev_year+4 and year=next_year-4
+select * 
+from athlete_events ae  
+inner join athletes a on a.id=ae.athlete_id
+where ae.year>=2000 and ae.medal='gold' and ae.season='summer'
+),
+bte as (
+select *,
+ lead(year) over (partition by name,event order by year) as nxt_olympic,
+ lead(year,2) over (partition by name,event order by year) as second_nxt_olympic 
+from cte)
+select 
+ name,
+ event,
+ year,
+ nxt_olympic,
+ second_nxt_olympic 
+from bte
+where second_nxt_olympic = nxt_olympic+4 and nxt_olympic=year+4;
